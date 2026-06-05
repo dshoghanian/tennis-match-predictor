@@ -11,7 +11,7 @@ def _elo_annotated_df():
         "surface": ["Hard", "Clay"],
         "winner_id": [1, 1], "loser_id": [2, 3],
         "winner_elo_before": [1600.0, 1620.0],
-        "loser_elo_before": [1500.0, 1510.0],
+        "loser_elo_before": [1500.0, 1520.0],
         "winner_surface_elo_before": [1550.0, 1500.0],
         "loser_surface_elo_before": [1500.0, 1505.0],
         "winner_rank": [10, 9], "loser_rank": [20, 30],
@@ -27,7 +27,7 @@ def test_target_is_balanced_label():
 
 
 def test_elo_diff_sign_matches_winner_perspective():
-    feats = build_features(_elo_annotated_df(), seed=0)
+    feats = build_features(_elo_annotated_df(), seed=42)
     # When a_won==1, player A is the winner, so a's elo_before - b's should be +100.
     won = feats[feats["a_won"] == 1].iloc[0]
     assert won["elo_diff"] == 100.0
