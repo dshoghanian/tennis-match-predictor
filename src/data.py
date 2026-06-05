@@ -1,5 +1,5 @@
 # src/data.py
-"""Load, clean, and chronologically order ATP match files."""
+"""Load, clean, and chronologically order tennis match files (ATP or WTA)."""
 from pathlib import Path
 import pandas as pd
 

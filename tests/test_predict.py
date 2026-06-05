@@ -163,3 +163,9 @@ def test_load_predictors_skips_missing_tour(tmp_path):
     save_artifacts(tmp_path / "atp", _DummyModel(), state)  # only atp present
     preds = load_predictors(tmp_path)
     assert set(preds.keys()) == {"atp"}
+
+
+def test_load_predictors_raises_when_no_tours(tmp_path):
+    from src.predict import load_predictors
+    with pytest.raises(FileNotFoundError):
+        load_predictors(tmp_path)

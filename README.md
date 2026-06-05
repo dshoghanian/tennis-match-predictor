@@ -63,5 +63,6 @@ the resolved full names; `predict_proba(...)` returns just the probability.
 
 ## Data
 
-[JeffSackmann/tennis_atp](https://github.com/JeffSackmann/tennis_atp),
-licensed CC BY-NC-SA 4.0 (non-commercial use only).
+[JeffSackmann/tennis_atp](https://github.com/JeffSackmann/tennis_atp) (men) and
+[JeffSackmann/tennis_wta](https://github.com/JeffSackmann/tennis_wta) (women),
+both licensed CC BY-NC-SA 4.0 (non-commercial use only).
