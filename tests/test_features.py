@@ -39,3 +39,33 @@ def test_no_outcome_columns_leak_into_features():
     feats = build_features(_elo_annotated_df(), seed=0)
     banned = {"winner_id", "loser_id", "w_ace", "l_ace", "score"}
     assert banned.isdisjoint(set(FEATURE_COLUMNS))
+
+
+# Rolling history feature tests
+from src.features import add_history_features
+
+
+def test_recent_winpct_uses_only_past_matches():
+    # Player 1 wins match0, then plays match1. At match1, player 1's pre-match
+    # recent win% must be 1.0 (from match0) and must NOT include match1 itself.
+    df = pd.DataFrame({
+        "tourney_date": pd.to_datetime(["2020-01-01", "2020-01-08"]),
+        "surface": ["Hard", "Hard"],
+        "winner_id": [1, 1], "loser_id": [2, 3],
+    })
+    out = add_history_features(df, window=5)
+    # match0 is player 1's first ever match => no history => 0.5 prior
+    assert out.loc[0, "winner_recent_winpct"] == 0.5
+    # match1 => player 1 has 1 prior win => 1.0
+    assert out.loc[1, "winner_recent_winpct"] == 1.0
+
+
+def test_h2h_counts_only_prior_meetings():
+    df = pd.DataFrame({
+        "tourney_date": pd.to_datetime(["2020-01-01", "2020-06-01"]),
+        "surface": ["Hard", "Hard"],
+        "winner_id": [1, 1], "loser_id": [2, 2],  # same pairing twice
+    })
+    out = add_history_features(df, window=5)
+    assert out.loc[0, "winner_h2h_wins"] == 0  # first meeting
+    assert out.loc[1, "winner_h2h_wins"] == 1  # one prior win vs this foe
