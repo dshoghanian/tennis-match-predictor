@@ -11,6 +11,11 @@ from src.elo import INITIAL_ELO
 MODEL_FILE = "model.pkl"
 STATE_FILE = "state.pkl"
 FUZZY_MATCH_THRESHOLD = 60
+# When several names score within this many points of the best fuzzy match,
+# treat them as a tie and disambiguate by Elo (prefer the stronger player).
+# This prevents a bare surname like "Sinner" from resolving to an obscure
+# namesake (Martin Sinner) instead of the player you mean (Jannik Sinner).
+FUZZY_MATCH_MARGIN = 15
 
 
 def save_artifacts(out_dir, model, state):
@@ -49,19 +54,30 @@ def _resolve_surface(surface, surface_ratings):
     return normalized
 
 
-def _resolve_player(name, names):
-    """Fuzzy-match a typed name to a known player_id.
+def _resolve_player(name, names, ratings):
+    """Fuzzy-match a typed name to a known player_id, disambiguating by Elo.
 
-    Raises ValueError if no candidate scores above FUZZY_MATCH_THRESHOLD,
-    so an unrecognized name fails loudly instead of resolving to a wrong player.
+    Names are matched case-insensitively. Among all candidates whose fuzzy score
+    is within FUZZY_MATCH_MARGIN of the best, the one with the highest Elo is
+    chosen, so an ambiguous surname resolves to the player you most likely mean
+    (e.g. "Sinner" -> Jannik Sinner, not Martin Sinner). Raises ValueError if no
+    candidate scores above FUZZY_MATCH_THRESHOLD, so an unrecognized name fails
+    loudly instead of resolving to a wrong player.
     """
     name_to_id = {v: k for k, v in names.items()}
-    match, score = fuzz_process.extractOne(name, list(name_to_id.keys()))
-    if score < FUZZY_MATCH_THRESHOLD:
+    candidates = fuzz_process.extract(name, list(name_to_id), limit=10)
+    best_score = candidates[0][1]
+    if best_score < FUZZY_MATCH_THRESHOLD:
         raise ValueError(
-            f"No confident match for {name!r} (best guess {match!r}, score {score})."
+            f"No confident match for {name!r} "
+            f"(best guess {candidates[0][0]!r}, score {best_score})."
         )
-    return name_to_id[match], match
+    # Among near-tied name matches, prefer the highest-Elo (most prominent) player.
+    close = [c for c in candidates if c[1] >= best_score - FUZZY_MATCH_MARGIN]
+    best_name = max(
+        close, key=lambda c: ratings.get(name_to_id[c[0]], INITIAL_ELO)
+    )[0]
+    return name_to_id[best_name], best_name
 
 
 def _feature_vector(state, id_a, id_b, surface):
@@ -79,14 +95,27 @@ def _feature_vector(state, id_a, id_b, surface):
     return np.array([[values.get(c, 0.0) for c in state["feature_columns"]]])
 
 
+def predict_match(model, state, name_a, name_b, surface):
+    """Resolve names + surface and predict, returning the resolved labels too.
+
+    Returns a dict: {prob, player_a, player_b, surface} where prob is
+    P(player_a beats player_b). Exposing the resolved full names lets callers
+    confirm the fuzzy matcher picked the players they meant.
+    """
+    surface = _resolve_surface(surface, state["surface_ratings"])
+    id_a, resolved_a = _resolve_player(name_a, state["names"], state["ratings"])
+    id_b, resolved_b = _resolve_player(name_b, state["names"], state["ratings"])
+    X = _feature_vector(state, id_a, id_b, surface)
+    prob = float(model.predict_proba(X)[0, 1])
+    return {"prob": prob, "player_a": resolved_a,
+            "player_b": resolved_b, "surface": surface}
+
+
 def predict_proba(model, state, name_a, name_b, surface):
     """Return P(player A beats player B) on the given surface.
 
     `surface` is case-insensitive ("clay" == "Clay"); an unknown surface raises
-    ValueError rather than silently producing a surface-independent result.
+    ValueError. Names are fuzzy-matched and disambiguated by Elo (see
+    _resolve_player). Use predict_match to also see the resolved player names.
     """
-    surface = _resolve_surface(surface, state["surface_ratings"])
-    id_a, _ = _resolve_player(name_a, state["names"])
-    id_b, _ = _resolve_player(name_b, state["names"])
-    X = _feature_vector(state, id_a, id_b, surface)
-    return float(model.predict_proba(X)[0, 1])
+    return predict_match(model, state, name_a, name_b, surface)["prob"]

@@ -5,7 +5,9 @@ from src.predict import (
     save_artifacts,
     load_artifacts,
     predict_proba,
+    predict_match,
     _resolve_surface,
+    _resolve_player,
 )
 
 
@@ -77,6 +79,47 @@ def test_unknown_surface_raises():
     sr = {(1, "Clay"): 1.0, (1, "Hard"): 1.0}
     with pytest.raises(ValueError):
         _resolve_surface("dirt", sr)
+
+
+def test_name_disambiguated_by_elo():
+    # A bare surname shared by two players must resolve to the higher-Elo one,
+    # not whichever the raw fuzzy score happens to rank first.
+    names = {1: "Jannik Sinner", 2: "Martin Sinner"}
+    ratings = {1: 2100.0, 2: 1400.0}
+    _id, matched = _resolve_player("Sinner", names, ratings)
+    assert matched == "Jannik Sinner"
+
+
+def test_name_typo_resolves_to_prominent_player():
+    names = {1: "Carlos Alcaraz", 2: "Emilio Benfele Alvarez"}
+    ratings = {1: 2200.0, 2: 1500.0}
+    _id, matched = _resolve_player("Alcarez", names, ratings)
+    assert matched == "Carlos Alcaraz"
+
+
+def test_exact_full_name_beats_elo_tiebreak():
+    # Typing the full weaker name must still select that player; the Elo
+    # tiebreak only applies among near-tied fuzzy scores.
+    names = {1: "Jannik Sinner", 2: "Martin Sinner"}
+    ratings = {1: 2100.0, 2: 1400.0}
+    _id, matched = _resolve_player("Martin Sinner", names, ratings)
+    assert matched == "Martin Sinner"
+
+
+def test_predict_match_reports_resolved_names(tmp_path):
+    state = {
+        "ratings": {1: 2100.0, 2: 1400.0},
+        "surface_ratings": {(1, "Clay"): 2100.0, (2, "Clay"): 1400.0},
+        "names": {1: "Jannik Sinner", 2: "Martin Sinner"},
+        "feature_columns": ["elo_diff", "surface_elo_diff"],
+    }
+    save_artifacts(tmp_path, _DummyModel(), state)
+    model, loaded = load_artifacts(tmp_path)
+    out = predict_match(model, loaded, "Sinner", "Martin Sinner", "clay")
+    assert out["player_a"] == "Jannik Sinner"
+    assert out["player_b"] == "Martin Sinner"
+    assert out["surface"] == "Clay"
+    assert 0.0 <= out["prob"] <= 1.0
 
 
 def test_surface_changes_prediction(tmp_path):
