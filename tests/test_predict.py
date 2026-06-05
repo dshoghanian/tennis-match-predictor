@@ -33,3 +33,17 @@ def test_predict_proba_favors_higher_elo(tmp_path):
     model, loaded = load_artifacts(tmp_path)
     p = predict_proba(model, loaded, "Alcaraz", "Sinner", "Clay")
     assert p > 0.5  # higher-Elo player A favored
+
+
+def test_unknown_name_raises(tmp_path):
+    import pytest
+    state = {
+        "ratings": {1: 1700.0, 2: 1500.0},
+        "surface_ratings": {(1, "Clay"): 1650.0, (2, "Clay"): 1500.0},
+        "names": {1: "Carlos Alcaraz", 2: "Jannik Sinner"},
+        "feature_columns": ["elo_diff", "surface_elo_diff"],
+    }
+    save_artifacts(tmp_path, _DummyModel(), state)
+    model, loaded = load_artifacts(tmp_path)
+    with pytest.raises(ValueError):
+        predict_proba(model, loaded, "zzzxqwq", "Sinner", "Clay")

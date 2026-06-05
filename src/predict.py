@@ -10,6 +10,7 @@ from src.elo import INITIAL_ELO
 
 MODEL_FILE = "model.pkl"
 STATE_FILE = "state.pkl"
+FUZZY_MATCH_THRESHOLD = 60
 
 
 def save_artifacts(out_dir, model, state):
@@ -33,9 +34,17 @@ def load_artifacts(in_dir):
 
 
 def _resolve_player(name, names):
-    """Fuzzy-match a typed name to a known player_id."""
+    """Fuzzy-match a typed name to a known player_id.
+
+    Raises ValueError if no candidate scores above FUZZY_MATCH_THRESHOLD,
+    so an unrecognized name fails loudly instead of resolving to a wrong player.
+    """
     name_to_id = {v: k for k, v in names.items()}
-    match, _ = fuzz_process.extractOne(name, list(name_to_id.keys()))
+    match, score = fuzz_process.extractOne(name, list(name_to_id.keys()))
+    if score < FUZZY_MATCH_THRESHOLD:
+        raise ValueError(
+            f"No confident match for {name!r} (best guess {match!r}, score {score})."
+        )
     return name_to_id[match], match
 
 
