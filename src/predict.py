@@ -33,6 +33,22 @@ def load_artifacts(in_dir):
     return model, state
 
 
+def _resolve_surface(surface, surface_ratings):
+    """Normalize a surface string and validate it against known surfaces.
+
+    Accepts any case ("clay", "CLAY" -> "Clay"). Raises ValueError for an
+    unknown surface so a typo fails loudly instead of silently falling back to
+    a neutral rating (which would make every surface return the same number).
+    """
+    known = {s for (_pid, s) in surface_ratings}
+    normalized = str(surface).strip().title()
+    if normalized not in known:
+        raise ValueError(
+            f"Unknown surface {surface!r}. Expected one of {sorted(known)}."
+        )
+    return normalized
+
+
 def _resolve_player(name, names):
     """Fuzzy-match a typed name to a known player_id.
 
@@ -64,7 +80,12 @@ def _feature_vector(state, id_a, id_b, surface):
 
 
 def predict_proba(model, state, name_a, name_b, surface):
-    """Return P(player A beats player B) on the given surface."""
+    """Return P(player A beats player B) on the given surface.
+
+    `surface` is case-insensitive ("clay" == "Clay"); an unknown surface raises
+    ValueError rather than silently producing a surface-independent result.
+    """
+    surface = _resolve_surface(surface, state["surface_ratings"])
     id_a, _ = _resolve_player(name_a, state["names"])
     id_b, _ = _resolve_player(name_b, state["names"])
     X = _feature_vector(state, id_a, id_b, surface)
