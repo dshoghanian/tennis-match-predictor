@@ -10,6 +10,9 @@ from collections import defaultdict, deque
 import numpy as np
 import pandas as pd
 
+# Days assumed since a player's previous match when they have no prior history.
+COLD_START_DAYS_SINCE_LAST = 365
+
 FEATURE_COLUMNS = [
     "elo_diff",
     "surface_elo_diff",
@@ -82,6 +85,11 @@ def add_history_features(df, window=10):
     Adds winner/loser columns: recent_winpct, h2h_wins, days_since_last.
     All values reflect only matches BEFORE the current row (chronological).
     """
+    if not df["tourney_date"].is_monotonic_increasing:
+        raise ValueError(
+            "add_history_features requires df sorted by tourney_date ascending "
+            "(call clean_matches first)."
+        )
     last_results = defaultdict(lambda: deque(maxlen=window))  # 1=win,0=loss
     h2h = defaultdict(int)        # (player, opponent) -> wins by player
     last_date = {}                # player -> last match date
@@ -97,7 +105,7 @@ def add_history_features(df, window=10):
         return sum(d) / len(d) if d else 0.5
 
     def days_since(pid, date):
-        return (date - last_date[pid]).days if pid in last_date else 365
+        return (date - last_date[pid]).days if pid in last_date else COLD_START_DAYS_SINCE_LAST
 
     for row in df.itertuples(index=False):
         w, l, date = row.winner_id, row.loser_id, row.tourney_date

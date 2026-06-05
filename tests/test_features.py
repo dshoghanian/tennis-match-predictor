@@ -69,3 +69,14 @@ def test_h2h_counts_only_prior_meetings():
     out = add_history_features(df, window=5)
     assert out.loc[0, "winner_h2h_wins"] == 0  # first meeting
     assert out.loc[1, "winner_h2h_wins"] == 1  # one prior win vs this foe
+
+
+def test_history_requires_sorted_input():
+    import pytest
+    df = pd.DataFrame({
+        "tourney_date": pd.to_datetime(["2020-06-01", "2020-01-01"]),  # descending
+        "surface": ["Hard", "Hard"],
+        "winner_id": [1, 1], "loser_id": [2, 3],
+    })
+    with pytest.raises(ValueError):
+        add_history_features(df)
