@@ -10,16 +10,16 @@ ROUND_ORDER = {
 }
 
 
-def load_matches(raw_dir, start_year=1991, end_year=2026):
-    """Read and concatenate atp_matches_<year>.csv files that exist."""
-    raw_dir = Path(raw_dir)
+def load_matches(raw_dir, tour="atp", start_year=1991, end_year=2026):
+    """Read and concatenate <tour>_matches_<year>.csv files under raw_dir/<tour>/."""
+    tour_dir = Path(raw_dir) / tour
     frames = []
     for year in range(start_year, end_year + 1):
-        path = raw_dir / f"atp_matches_{year}.csv"
+        path = tour_dir / f"{tour}_matches_{year}.csv"
         if path.exists():
             frames.append(pd.read_csv(path))
     if not frames:
-        raise FileNotFoundError(f"No match files found in {raw_dir}")
+        raise FileNotFoundError(f"No {tour} match files found in {tour_dir}")
     return pd.concat(frames, ignore_index=True)
 
 

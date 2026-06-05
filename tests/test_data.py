@@ -45,3 +45,25 @@ def test_clean_sorts_across_dates():
 def test_clean_drops_helper_column():
     out = clean_matches(_raw_df())
     assert "_round_order" not in out.columns
+
+
+# --- load_matches tour-subfolder tests ---
+from src.data import load_matches
+
+
+def test_load_matches_reads_tour_subdir(tmp_path):
+    d = tmp_path / "wta"
+    d.mkdir()
+    pd.DataFrame({
+        "tourney_date": [20200101], "round": ["F"], "surface": ["Hard"],
+        "winner_id": [1], "loser_id": [2],
+    }).to_csv(d / "wta_matches_2020.csv", index=False)
+    df = load_matches(tmp_path, tour="wta", start_year=2020, end_year=2020)
+    assert len(df) == 1
+    assert df.loc[0, "winner_id"] == 1
+
+
+def test_load_matches_missing_tour_raises(tmp_path):
+    import pytest
+    with pytest.raises(FileNotFoundError):
+        load_matches(tmp_path, tour="wta", start_year=2020, end_year=2020)
