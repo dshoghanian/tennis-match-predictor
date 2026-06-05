@@ -1,26 +1,23 @@
-# ATP Tennis Match Predictor
+# ATP & WTA Tennis Match Predictor
 
-Predicts the winner of an ATP singles match using Elo ratings (overall +
-surface-specific) and an XGBoost model trained on Jeff Sackmann's match data
-(1991–present). Includes an on-demand matchup predictor.
+Predicts the winner of a professional singles match on the men's (ATP) or women's (WTA) tour, using Elo ratings (overall + surface-specific) and an XGBoost model trained on Jeff Sackmann's match data (1991–present). Each tour is a separate model. Includes an on-demand matchup predictor.
 
 ## Results (held-out test set, 2022–present)
 
-| Model | Accuracy | Log-loss | AUC |
-|-------|----------|----------|-----|
-| Higher-rank baseline | 0.639 | — | — |
-| Elo baseline | 0.641 | 0.636 | 0.700 |
-| **XGBoost** | **0.653** | **0.616** | **0.716** |
+| Tour | Higher-rank | Elo | XGBoost | AUC |
+|------|-------------|-----|---------|-----|
+| ATP (men) | 0.639 | 0.641 | **0.653** | 0.716 |
+| WTA (women) | 0.625 | 0.650 | **0.655** | 0.713 |
 
-(~0.65 is in the expected range for pre-match ATP prediction; the realistic
-ceiling is roughly 0.67–0.70.)
+XGBoost beats the rank and Elo baselines on both tours; ~0.65 is in the expected
+range for pre-match tennis prediction (realistic ceiling ~0.67–0.70).
 
 ## Setup
 
 ```bash
 conda env create -f environment.yml
 conda activate tennis_env
-bash scripts/download_data.sh          # fetch CSVs into data/raw/
+bash scripts/download_data.sh        # fetch ATP + WTA CSVs into data/raw/<tour>/
 jupyter lab                            # open notebooks/tennis_prediction.ipynb
 ```
 
@@ -49,20 +46,20 @@ Matches are split by time (train on the past, test on the future), never shuffle
 
 ## On-demand prediction
 
-First run the notebook through section 8 ("Train final model and save artifacts")
-to generate `models/model.pkl` and `models/state.pkl` — these are gitignored and
-not present after a fresh clone. Then:
+Each tour is a separate model; `tour` selects which. Run the notebook's per-tour
+training section first to generate `models/atp/` and `models/wta/`.
 
 ```python
-from src.predict import load_artifacts, predict_proba
-model, state = load_artifacts("models")
-predict_proba(model, state, "Alcaraz", "Sinner", "Clay")  # -> win probability
+from src.predict import load_predictors, predict_match
+preds = load_predictors("models")
+predict_match(preds, "Sinner", "Medvedev", "Hard", tour="atp")
+predict_match(preds, "Swiatek", "Sabalenka", "Clay", tour="wta")
 ```
 
-Note: on-demand predictions for a hypothetical future match use the players'
-latest Elo ratings; the rolling history features are neutralized (set to 0), so
-these probabilities are Elo-driven and can be more extreme than the model's
-test-set distribution.
+Player names are fuzzy-matched and disambiguated by Elo within the chosen tour
+(so "Sinner" → Jannik Sinner). Surfaces are case-insensitive. An unknown tour,
+surface, or unrecognizable name raises a clear error. Use `predict_match` to see
+the resolved full names; `predict_proba(...)` returns just the probability.
 
 ## Data
 
