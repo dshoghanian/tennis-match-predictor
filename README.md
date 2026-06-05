@@ -49,6 +49,10 @@ Matches are split by time (train on the past, test on the future), never shuffle
 
 ## On-demand prediction
 
+First run the notebook through section 8 ("Train final model and save artifacts")
+to generate `models/model.pkl` and `models/state.pkl` — these are gitignored and
+not present after a fresh clone. Then:
+
 ```python
 from src.predict import load_artifacts, predict_proba
 model, state = load_artifacts("models")

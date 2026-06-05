@@ -3,10 +3,10 @@ channels:
   - conda-forge
 dependencies:
   - python=3.11
-  - pandas
-  - numpy
-  - scikit-learn
-  - py-xgboost
+  - pandas=3.0.*
+  - numpy=2.4.*
+  - scikit-learn=1.9.*
+  - py-xgboost=3.2.*
   - matplotlib
   - seaborn
   - jupyterlab
