@@ -28,3 +28,20 @@ def test_clean_sorts_chronologically_then_by_round():
     # Same date: R32 (earlier round) must come before F (final)
     out = clean_matches(_raw_df()).reset_index(drop=True)
     assert ROUND_ORDER[out.loc[0, "round"]] <= ROUND_ORDER[out.loc[1, "round"]]
+
+
+def test_clean_sorts_across_dates():
+    raw = pd.DataFrame({
+        "tourney_date": [20230109, 20230102],
+        "round": ["F", "F"],
+        "surface": ["Hard", "Hard"],
+        "winner_id": [1, 2],
+        "loser_id": [3, 4],
+    })
+    out = clean_matches(raw).reset_index(drop=True)
+    assert out.loc[0, "tourney_date"] < out.loc[1, "tourney_date"]
+
+
+def test_clean_drops_helper_column():
+    out = clean_matches(_raw_df())
+    assert "_round_order" not in out.columns

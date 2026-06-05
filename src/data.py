@@ -31,5 +31,6 @@ def clean_matches(df):
     )
     df = df.dropna(subset=["surface", "winner_id", "loser_id"])
     df["_round_order"] = df["round"].map(ROUND_ORDER).fillna(3).astype(int)
+    df = df.dropna(subset=["tourney_date"])
     df = df.sort_values(["tourney_date", "_round_order"]).reset_index(drop=True)
-    return df
+    return df.drop(columns="_round_order")
