@@ -1,20 +1,26 @@
 #!/usr/bin/env bash
-# Download Jeff Sackmann ATP singles match files (1991-2026) into data/raw/.
-# Source: https://github.com/JeffSackmann/tennis_atp (CC BY-NC-SA 4.0)
+# Download Jeff Sackmann ATP/WTA singles match files (1991-2026) into data/raw/<tour>/.
+# Sources: https://github.com/JeffSackmann/tennis_atp , https://github.com/JeffSackmann/tennis_wta
+# (CC BY-NC-SA 4.0). Usage: download_data.sh [atp|wta]   (no arg = both tours)
 set -euo pipefail
 
-RAW_DIR="$(dirname "$0")/../data/raw"
-BASE_URL="https://raw.githubusercontent.com/JeffSackmann/tennis_atp/master"
-mkdir -p "$RAW_DIR"
+ROOT="$(dirname "$0")/.."
+TOURS=("atp" "wta")
+if [ "${1:-}" != "" ]; then TOURS=("$1"); fi
 
-for year in $(seq 1991 2026); do
-  url="$BASE_URL/atp_matches_${year}.csv"
-  out="$RAW_DIR/atp_matches_${year}.csv"
-  if [ -f "$out" ]; then
-    echo "skip  $year (exists)"
-    continue
-  fi
-  echo "fetch $year"
-  curl -fsSL "$url" -o "$out" || { echo "warn  $year not available"; rm -f "$out"; }
+for tour in "${TOURS[@]}"; do
+  raw_dir="$ROOT/data/raw/$tour"
+  base_url="https://raw.githubusercontent.com/JeffSackmann/tennis_${tour}/master"
+  mkdir -p "$raw_dir"
+  for year in $(seq 1991 2026); do
+    out="$raw_dir/${tour}_matches_${year}.csv"
+    if [ -f "$out" ]; then
+      echo "skip  $tour $year (exists)"
+      continue
+    fi
+    echo "fetch $tour $year"
+    curl -fsSL "$base_url/${tour}_matches_${year}.csv" -o "$out" \
+      || { echo "warn  $tour $year not available"; rm -f "$out"; }
+  done
 done
-echo "Done. Files in $RAW_DIR"
+echo "Done. Files in data/raw/<tour>/"
