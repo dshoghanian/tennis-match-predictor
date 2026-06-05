@@ -43,3 +43,5 @@ def test_elo_columns_are_pre_match_snapshots():
     out, _, _ = compute_elo(df)
     assert out.loc[0, "winner_elo_before"] == 1500
     assert out.loc[0, "loser_elo_before"] == 1500
+    assert out.loc[0, "winner_surface_elo_before"] == 1500
+    assert out.loc[0, "loser_surface_elo_before"] == 1500

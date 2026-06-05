@@ -7,7 +7,6 @@ is updated, so downstream features never see post-match information.
 from collections import defaultdict
 
 INITIAL_ELO = 1500.0
-SURFACES = ("Hard", "Clay", "Grass")
 
 
 def expected_score(rating_a, rating_b):
