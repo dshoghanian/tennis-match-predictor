@@ -95,12 +95,31 @@ def _feature_vector(state, id_a, id_b, surface):
     return np.array([[values.get(c, 0.0) for c in state["feature_columns"]]])
 
 
-def predict_match(model, state, name_a, name_b, surface):
-    """Resolve names + surface and predict, returning the resolved labels too.
+def load_predictors(models_dir, tours=("atp", "wta")):
+    """Load each available tour's (model, state) from models_dir/<tour>/.
 
-    Returns a dict: {prob, player_a, player_b, surface} where prob is
-    P(player_a beats player_b). Exposing the resolved full names lets callers
-    confirm the fuzzy matcher picked the players they meant.
+    Returns {tour: (model, state)} for every tour whose artifacts exist. Tours
+    with no saved model are skipped, so an ATP-only setup still loads.
+    """
+    models_dir = Path(models_dir)
+    predictors = {}
+    for tour in tours:
+        tour_dir = models_dir / tour
+        if (tour_dir / MODEL_FILE).exists() and (tour_dir / STATE_FILE).exists():
+            predictors[tour] = load_artifacts(tour_dir)
+    if not predictors:
+        raise FileNotFoundError(
+            f"No tour models found under {models_dir} (looked for {list(tours)})."
+        )
+    return predictors
+
+
+def _predict_one(model, state, name_a, name_b, surface):
+    """Score a single matchup against one tour's model/state.
+
+    Returns {prob, player_a, player_b, surface} where prob is P(player_a beats
+    player_b). `surface` is case-insensitive; names are fuzzy-matched and
+    disambiguated by Elo (see _resolve_player).
     """
     surface = _resolve_surface(surface, state["surface_ratings"])
     id_a, resolved_a = _resolve_player(name_a, state["names"], state["ratings"])
@@ -111,11 +130,22 @@ def predict_match(model, state, name_a, name_b, surface):
             "player_b": resolved_b, "surface": surface}
 
 
-def predict_proba(model, state, name_a, name_b, surface):
-    """Return P(player A beats player B) on the given surface.
+def predict_match(predictors, name_a, name_b, surface, tour):
+    """Predict a matchup on a given tour.
 
-    `surface` is case-insensitive ("clay" == "Clay"); an unknown surface raises
-    ValueError. Names are fuzzy-matched and disambiguated by Elo (see
-    _resolve_player). Use predict_match to also see the resolved player names.
+    `predictors` is the dict from load_predictors. Raises ValueError if `tour`
+    is not among the loaded tours. Returns the _predict_one dict plus `tour`.
     """
-    return predict_match(model, state, name_a, name_b, surface)["prob"]
+    if tour not in predictors:
+        raise ValueError(
+            f"Unknown tour {tour!r}. Available: {sorted(predictors)}."
+        )
+    model, state = predictors[tour]
+    result = _predict_one(model, state, name_a, name_b, surface)
+    result["tour"] = tour
+    return result
+
+
+def predict_proba(predictors, name_a, name_b, surface, tour):
+    """Return P(player_a beats player_b) on the given tour and surface."""
+    return predict_match(predictors, name_a, name_b, surface, tour)["prob"]

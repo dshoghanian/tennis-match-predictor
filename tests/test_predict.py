@@ -30,6 +30,11 @@ def test_artifacts_round_trip(tmp_path):
     assert loaded["ratings"][1] == 1700.0
 
 
+# helper: wrap a single state as a one-tour predictors dict
+def _atp(state):
+    return {"atp": (_DummyModel(), state)}
+
+
 def test_predict_proba_favors_higher_elo(tmp_path):
     state = {
         "ratings": {1: 1700.0, 2: 1500.0},
@@ -37,23 +42,19 @@ def test_predict_proba_favors_higher_elo(tmp_path):
         "names": {1: "Carlos Alcaraz", 2: "Jannik Sinner"},
         "feature_columns": ["elo_diff", "surface_elo_diff"],
     }
-    save_artifacts(tmp_path, _DummyModel(), state)
-    model, loaded = load_artifacts(tmp_path)
-    p = predict_proba(model, loaded, "Alcaraz", "Sinner", "Clay")
-    assert p > 0.5  # higher-Elo player A favored
+    p = predict_proba(_atp(state), "Alcaraz", "Sinner", "Clay", tour="atp")
+    assert p > 0.5
 
 
-def test_unknown_name_raises(tmp_path):
+def test_unknown_name_raises():
     state = {
         "ratings": {1: 1700.0, 2: 1500.0},
         "surface_ratings": {(1, "Clay"): 1650.0, (2, "Clay"): 1500.0},
         "names": {1: "Carlos Alcaraz", 2: "Jannik Sinner"},
         "feature_columns": ["elo_diff", "surface_elo_diff"],
     }
-    save_artifacts(tmp_path, _DummyModel(), state)
-    model, loaded = load_artifacts(tmp_path)
     with pytest.raises(ValueError):
-        predict_proba(model, loaded, "zzzxqwq", "Sinner", "Clay")
+        predict_proba(_atp(state), "zzzxqwq", "Sinner", "Clay", tour="atp")
 
 
 def _multi_surface_state():
@@ -106,31 +107,59 @@ def test_exact_full_name_beats_elo_tiebreak():
     assert matched == "Martin Sinner"
 
 
-def test_predict_match_reports_resolved_names(tmp_path):
+def test_predict_match_reports_resolved_names():
     state = {
         "ratings": {1: 2100.0, 2: 1400.0},
         "surface_ratings": {(1, "Clay"): 2100.0, (2, "Clay"): 1400.0},
         "names": {1: "Jannik Sinner", 2: "Martin Sinner"},
         "feature_columns": ["elo_diff", "surface_elo_diff"],
     }
-    save_artifacts(tmp_path, _DummyModel(), state)
-    model, loaded = load_artifacts(tmp_path)
-    out = predict_match(model, loaded, "Sinner", "Martin Sinner", "clay")
+    out = predict_match(_atp(state), "Sinner", "Martin Sinner", "clay", tour="atp")
     assert out["player_a"] == "Jannik Sinner"
     assert out["player_b"] == "Martin Sinner"
     assert out["surface"] == "Clay"
+    assert out["tour"] == "atp"
     assert 0.0 <= out["prob"] <= 1.0
 
 
-def test_surface_changes_prediction(tmp_path):
-    # The bug: lowercase surface silently produced the same number every time.
-    # With normalization, clay vs grass must give different results, and a
-    # lowercase surface must match its capitalized form exactly.
+def test_surface_changes_prediction():
     state = _multi_surface_state()
-    save_artifacts(tmp_path, _DummyModel(), state)
-    model, loaded = load_artifacts(tmp_path)
-    p_clay = predict_proba(model, loaded, "Alcaraz", "Sinner", "clay")
-    p_grass = predict_proba(model, loaded, "Alcaraz", "Sinner", "grass")
-    assert p_clay != p_grass  # surface actually matters now
-    # case-insensitive: lowercase equals capitalized
-    assert p_clay == predict_proba(model, loaded, "Alcaraz", "Sinner", "Clay")
+    preds = {"atp": (_DummyModel(), state)}
+    p_clay = predict_proba(preds, "Alcaraz", "Sinner", "clay", tour="atp")
+    p_grass = predict_proba(preds, "Alcaraz", "Sinner", "grass", tour="atp")
+    assert p_clay != p_grass
+    assert p_clay == predict_proba(preds, "Alcaraz", "Sinner", "Clay", tour="atp")
+
+
+def test_unknown_tour_raises():
+    state = {
+        "ratings": {1: 1700.0, 2: 1500.0},
+        "surface_ratings": {(1, "Clay"): 1650.0, (2, "Clay"): 1500.0},
+        "names": {1: "Carlos Alcaraz", 2: "Jannik Sinner"},
+        "feature_columns": ["elo_diff", "surface_elo_diff"],
+    }
+    with pytest.raises(ValueError):
+        predict_match(_atp(state), "Alcaraz", "Sinner", "Clay", tour="wta")
+
+
+def test_load_predictors_loads_available_tours(tmp_path):
+    from src.predict import load_predictors
+    state = {
+        "ratings": {1: 1700.0}, "surface_ratings": {(1, "Clay"): 1700.0},
+        "names": {1: "Carlos Alcaraz"}, "feature_columns": ["elo_diff", "surface_elo_diff"],
+    }
+    save_artifacts(tmp_path / "atp", _DummyModel(), state)
+    save_artifacts(tmp_path / "wta", _DummyModel(), state)
+    preds = load_predictors(tmp_path)
+    assert set(preds.keys()) == {"atp", "wta"}
+
+
+def test_load_predictors_skips_missing_tour(tmp_path):
+    from src.predict import load_predictors
+    state = {
+        "ratings": {1: 1700.0}, "surface_ratings": {(1, "Clay"): 1700.0},
+        "names": {1: "Carlos Alcaraz"}, "feature_columns": ["elo_diff", "surface_elo_diff"],
+    }
+    save_artifacts(tmp_path / "atp", _DummyModel(), state)  # only atp present
+    preds = load_predictors(tmp_path)
+    assert set(preds.keys()) == {"atp"}
