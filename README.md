@@ -32,7 +32,7 @@ pytest -v        # or: conda run -n tennis_env pytest -q
 - `src/data.py` — load, clean, chronologically sort match files
 - `src/elo.py` — chronological Elo engine (overall + surface-specific)
 - `src/features.py` — leakage-safe symmetric feature builder
-- `src/predict.py` — artifact persistence + on-demand `predict_proba`
+- `src/predict.py` — artifact persistence + tour-routed on-demand predictor (`load_predictors`, `predict_match`)
 - `notebooks/tennis_prediction.ipynb` — EDA → Elo → features → models → evaluation → live prediction
 - `scripts/download_data.sh` — data fetcher
 - `tests/` — unit tests incl. leakage guards
@@ -57,9 +57,15 @@ predict_match(preds, "Swiatek", "Sabalenka", "Clay", tour="wta")
 ```
 
 Player names are fuzzy-matched and disambiguated by Elo within the chosen tour
-(so "Sinner" → Jannik Sinner). Surfaces are case-insensitive. An unknown tour,
-surface, or unrecognizable name raises a clear error. Use `predict_match` to see
-the resolved full names; `predict_proba(...)` returns just the probability.
+(so "Sinner" → Jannik Sinner, not the journeyman Martin Sinner). Surfaces are
+case-insensitive. An unknown tour, surface, or unrecognizable name raises a clear
+error. Use `predict_match` to see the resolved full names; `predict_proba(...)`
+returns just the probability.
+
+**Scope:** the data is tour-level (ATP/WTA *main draw*), so lower-tier players
+(ITF / futures / qualifying) are not included. Naming one raises a "not in the
+dataset" error rather than silently substituting an unrelated namesake — the
+predictor refuses to guess about players it has never seen.
 
 ## Data
 
