@@ -4,6 +4,7 @@ import pickle
 from pathlib import Path
 
 import numpy as np
+from thefuzz import fuzz
 from thefuzz import process as fuzz_process
 
 from src.elo import INITIAL_ELO
@@ -16,6 +17,12 @@ FUZZY_MATCH_THRESHOLD = 60
 # This prevents a bare surname like "Sinner" from resolving to an obscure
 # namesake (Martin Sinner) instead of the player you mean (Jannik Sinner).
 FUZZY_MATCH_MARGIN = 15
+# Every word in a typed name must appear (this well) in the matched player's
+# name. A low minimum means a typed word is absent from the match — i.e. the
+# player is probably not in the dataset, so we refuse rather than silently
+# substitute someone else (e.g. "Maria Oliver Sanchez" -> "Maria Sakkari").
+# 85 keeps surname lookups and single-char typos while rejecting absent players.
+NAME_COVERAGE_THRESHOLD = 85
 
 
 def save_artifacts(out_dir, model, state):
@@ -54,6 +61,19 @@ def _resolve_surface(surface, surface_ratings):
     return normalized
 
 
+def _name_coverage(query, candidate):
+    """Min over query words of the best per-word similarity to the candidate name.
+
+    Low coverage means a typed word does not appear in the matched name, which
+    signals the intended player is not in the dataset (rather than a typo).
+    """
+    q_tokens = query.lower().split()
+    c_tokens = candidate.lower().split()
+    if not q_tokens or not c_tokens:
+        return 0
+    return min(max(fuzz.ratio(q, c) for c in c_tokens) for q in q_tokens)
+
+
 def _resolve_player(name, names, ratings):
     """Fuzzy-match a typed name to a known player_id, disambiguating by Elo.
 
@@ -61,8 +81,10 @@ def _resolve_player(name, names, ratings):
     is within FUZZY_MATCH_MARGIN of the best, the one with the highest Elo is
     chosen, so an ambiguous surname resolves to the player you most likely mean
     (e.g. "Sinner" -> Jannik Sinner, not Martin Sinner). Raises ValueError if no
-    candidate scores above FUZZY_MATCH_THRESHOLD, so an unrecognized name fails
-    loudly instead of resolving to a wrong player.
+    candidate scores above FUZZY_MATCH_THRESHOLD, or if every typed word does not
+    sufficiently appear in the best match (NAME_COVERAGE_THRESHOLD) — so a player
+    who is not in the dataset fails loudly instead of being silently swapped for
+    an unrelated namesake.
     """
     name_to_id = {v: k for k, v in names.items()}
     candidates = fuzz_process.extract(name, list(name_to_id), limit=10)
@@ -77,6 +99,12 @@ def _resolve_player(name, names, ratings):
     best_name = max(
         close, key=lambda c: ratings.get(name_to_id[c[0]], INITIAL_ELO)
     )[0]
+    if _name_coverage(name, best_name) < NAME_COVERAGE_THRESHOLD:
+        raise ValueError(
+            f"Couldn't confidently find a player named {name!r} "
+            f"(closest was {best_name!r}). They may not be in the dataset, "
+            f"which covers tour-level ATP/WTA main-draw players only."
+        )
     return name_to_id[best_name], best_name
 
 

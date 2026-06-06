@@ -169,3 +169,22 @@ def test_load_predictors_raises_when_no_tours(tmp_path):
     from src.predict import load_predictors
     with pytest.raises(FileNotFoundError):
         load_predictors(tmp_path)
+
+
+def test_player_not_in_dataset_raises():
+    # Full names of players absent from the dataset must fail loudly, not
+    # silently resolve to an unrelated player who shares one name token.
+    names = {1: "Jannik Sinner", 2: "Maria Sakkari", 3: "Carlos Alcaraz"}
+    ratings = {1: 2000.0, 2: 1800.0, 3: 2100.0}
+    with pytest.raises(ValueError):
+        _resolve_player("Berta Passola", names, ratings)
+    with pytest.raises(ValueError):
+        _resolve_player("Maria Oliver Sanchez", names, ratings)
+
+
+def test_known_surname_and_typo_still_resolve():
+    # The coverage guard must NOT break legitimate surname/typo lookups.
+    names = {1: "Jannik Sinner", 2: "Martin Sinner", 3: "Carlos Alcaraz"}
+    ratings = {1: 2100.0, 2: 1400.0, 3: 2200.0}
+    assert _resolve_player("Sinner", names, ratings)[1] == "Jannik Sinner"
+    assert _resolve_player("Alcarez", names, ratings)[1] == "Carlos Alcaraz"
