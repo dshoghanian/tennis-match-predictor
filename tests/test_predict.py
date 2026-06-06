@@ -188,3 +188,12 @@ def test_known_surname_and_typo_still_resolve():
     ratings = {1: 2100.0, 2: 1400.0, 3: 2200.0}
     assert _resolve_player("Sinner", names, ratings)[1] == "Jannik Sinner"
     assert _resolve_player("Alcarez", names, ratings)[1] == "Carlos Alcaraz"
+
+
+def test_exact_match_not_overridden_by_higher_elo_partial():
+    # A perfect full-name match must win even when a higher-Elo player has a
+    # coincidental partial fuzzy score (regression: "Maja Chwalinska" was being
+    # hijacked by higher-Elo "Li Li" and then refused).
+    names = {1: "Maja Chwalinska", 2: "Li Li", 3: "Maja Muric"}
+    ratings = {1: 1570.0, 2: 1718.0, 3: 1445.0}  # Li Li has the highest Elo
+    assert _resolve_player("Maja Chwalinska", names, ratings)[1] == "Maja Chwalinska"

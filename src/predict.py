@@ -12,11 +12,6 @@ from src.elo import INITIAL_ELO
 MODEL_FILE = "model.pkl"
 STATE_FILE = "state.pkl"
 FUZZY_MATCH_THRESHOLD = 60
-# When several names score within this many points of the best fuzzy match,
-# treat them as a tie and disambiguate by Elo (prefer the stronger player).
-# This prevents a bare surname like "Sinner" from resolving to an obscure
-# namesake (Martin Sinner) instead of the player you mean (Jannik Sinner).
-FUZZY_MATCH_MARGIN = 15
 # Every word in a typed name must appear (this well) in the matched player's
 # name. A low minimum means a typed word is absent from the match — i.e. the
 # player is probably not in the dataset, so we refuse rather than silently
@@ -77,34 +72,39 @@ def _name_coverage(query, candidate):
 def _resolve_player(name, names, ratings):
     """Fuzzy-match a typed name to a known player_id, disambiguating by Elo.
 
-    Names are matched case-insensitively. Among all candidates whose fuzzy score
-    is within FUZZY_MATCH_MARGIN of the best, the one with the highest Elo is
-    chosen, so an ambiguous surname resolves to the player you most likely mean
-    (e.g. "Sinner" -> Jannik Sinner, not Martin Sinner). Raises ValueError if no
-    candidate scores above FUZZY_MATCH_THRESHOLD, or if every typed word does not
-    sufficiently appear in the best match (NAME_COVERAGE_THRESHOLD) — so a player
-    who is not in the dataset fails loudly instead of being silently swapped for
-    an unrelated namesake.
+    Names are matched case-insensitively. Candidates are first restricted to
+    those where every typed word sufficiently appears (NAME_COVERAGE_THRESHOLD),
+    then the highest-Elo (most prominent) of those is chosen — so an ambiguous
+    surname resolves to the player you most likely mean ("Sinner" -> Jannik
+    Sinner) while a coincidental higher-Elo partial namesake cannot hijack an
+    exact match ("Maja Chwalinska" stays Maja Chwalinska). Raises ValueError if
+    no candidate scores above FUZZY_MATCH_THRESHOLD, or if none clears the
+    coverage bar — so a player not in the dataset fails loudly instead of being
+    silently swapped for an unrelated namesake.
     """
     name_to_id = {v: k for k, v in names.items()}
-    candidates = fuzz_process.extract(name, list(name_to_id), limit=10)
+    candidates = fuzz_process.extract(name, list(name_to_id), limit=20)
     best_score = candidates[0][1]
     if best_score < FUZZY_MATCH_THRESHOLD:
         raise ValueError(
             f"No confident match for {name!r} "
             f"(best guess {candidates[0][0]!r}, score {best_score})."
         )
-    # Among near-tied name matches, prefer the highest-Elo (most prominent) player.
-    close = [c for c in candidates if c[1] >= best_score - FUZZY_MATCH_MARGIN]
-    best_name = max(
-        close, key=lambda c: ratings.get(name_to_id[c[0]], INITIAL_ELO)
-    )[0]
-    if _name_coverage(name, best_name) < NAME_COVERAGE_THRESHOLD:
+    # Keep only candidates where every typed word actually appears in the name,
+    # THEN prefer the highest-Elo player among them. Filtering by coverage before
+    # the Elo tiebreak stops a higher-Elo partial namesake from displacing an
+    # exact match and then being rejected (which would refuse a real player).
+    eligible = [c for c in candidates
+                if _name_coverage(name, c[0]) >= NAME_COVERAGE_THRESHOLD]
+    if not eligible:
         raise ValueError(
             f"Couldn't confidently find a player named {name!r} "
-            f"(closest was {best_name!r}). They may not be in the dataset, "
+            f"(closest was {candidates[0][0]!r}). They may not be in the dataset, "
             f"which covers tour-level ATP/WTA main-draw players only."
         )
+    best_name = max(
+        eligible, key=lambda c: ratings.get(name_to_id[c[0]], INITIAL_ELO)
+    )[0]
     return name_to_id[best_name], best_name
 
 
